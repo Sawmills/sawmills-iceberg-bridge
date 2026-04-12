@@ -1,0 +1,37 @@
+version: 0.1
+
+cli:
+  version: 1.25.0
+
+plugins:
+  sources:
+    - id: trunk
+      ref: v1.7.6
+      uri: https://github.com/trunk-io/plugins
+
+runtimes:
+  enabled:
+    - node@22.16.0
+    - python@3.12.2
+
+lint:
+  enabled:
+    - git-diff-check
+    - markdownlint@0.48.0
+    - ruff@0.12.12
+    - shellcheck@0.11.0
+    - shfmt@3.12.0
+    - sqlfluff@3.4.2
+    - tflint@0.59.1
+  ignore:
+    - linters: [sqlfluff]
+      paths:
+        - snowflake/setup.sql
+
+actions:
+  disabled:
+    - trunk-announce
+    - trunk-check-pre-push
+  enabled:
+    - trunk-fmt-pre-commit
+    - trunk-upgrade-available
