@@ -1,117 +1,291 @@
-# Iceberg Bridge
+# Sawmills Iceberg Bridge
 
-Customer-facing bridge bundle for mirroring Parquet files from S3 into an
-Iceberg table in Amazon S3 Tables, then querying that table from Snowflake via
-AWS Glue REST.
+Bridge bundle for mirroring Parquet files from S3 into an Iceberg table in
+Amazon S3 Tables, then querying that table from Snowflake through AWS Glue
+REST.
 
-Exportable bundle contents:
+This repo packages the current supported path:
 
-* Glue job script: `glue_job/bridge.py`
-* Terraform module: `terraform/`
-* Snowflake setup template: `snowflake/setup.sql`
+1. source Parquet files land in S3
+2. AWS Glue reads only new files
+3. Glue writes into an Iceberg table in S3 Tables
+4. Snowflake reads that table through a Glue REST catalog integration
 
-## What it does
+## Who this is for
 
-* reads a source Parquet prefix from the collector path
-* tracks processed source files with an explicit checkpoint
-* normalizes the log shape into a query-friendly schema
-* writes an isolated Iceberg table in the target S3 Tables catalog
-* provides Snowflake setup SQL for catalog integration and validation queries
+Use this repo when:
 
-The supported writer path is the direct S3 Tables catalog path in Glue Spark.
+* your source data already lands as Parquet in S3
+* you want Iceberg file pruning and Parquet row-group pruning in Snowflake
+* you want a low-risk bridge before considering direct native Iceberg writes
 
-## Glue job
+Do not use this repo when:
 
-Run the Glue job script in `glue_job/bridge.py` with these required args:
+* you need sub-minute streaming freshness
+* you want this repo to create the S3 Tables bucket itself
+* you want Snowflake objects fully managed by Terraform in this repo
 
-* `JOB_NAME`
-* `SOURCE_PATH`
-* `CATALOG_NAME`
-* `NAMESPACE`
-* `TABLE_NAME`
-* `TABLE_BUCKET_ARN`
-* `MODE`
+## What is here
 
-Optional arg:
+* [`terraform/`](terraform/)
+  AWS-side deployment module
+* [`glue_job/`](glue_job/)
+  Glue Spark bridge logic
+* [`snowflake/setup.sql`](snowflake/setup.sql)
+  Snowflake-side integration and table setup template
 
-* `CHECKPOINT_URI`
+## What it manages
 
-Recommended first run:
+This repo manages:
 
-* `CATALOG_NAME=s3tablesbp`
-* `NAMESPACE=<customer_slug>_<dataset_slug>`
-* `TABLE_NAME=<dataset_slug>_service_hour`
-* `MODE=replace`
+* Glue job script uploads
+* Glue IAM role
+* Glue job
+* recurring Glue trigger
+* optional AWS-side Snowflake read role
+* optional Lake Formation `DESCRIBE` and `SELECT` grants on the target table
 
-Recommended naming model:
+This repo does not manage:
+
+* the source bucket or source prefix
+* the target S3 Tables bucket
+* Snowflake catalog integrations or Iceberg tables through Terraform
+* customer-specific benchmark artifacts or environment-specific runbooks
+
+## How it works
+
+The bridge supports two modes:
+
+* `replace`
+  * rebuilds the target table from the full source prefix
+  * preserves Iceberg table identity with `TRUNCATE TABLE`
+  * refreshes checkpoint state from the rebuilt source set
+* `append`
+  * lists source Parquet files
+  * skips files already recorded in the checkpoint
+  * reads only new files
+  * persists checkpoint updates only after a successful append
+
+Checkpoint path:
+
+* default:
+  * `<source-prefix>/_checkpoint/<namespace>/<table>/processed-files.json`
+
+The recurring trigger always runs `append`.
+Use `replace` only for controlled rebuilds.
+
+## Naming model
+
+The happy path is slug-driven.
+
+Canonical inputs:
 
 * `customer_slug`
 * `dataset_slug`
-* derive namespace and table name from those
-* only override the explicit names if the customer already has fixed standards
+* `environment`
 
-Bridge modes:
+Derived defaults:
 
-* `replace`
-  * preserves the target Iceberg table identity with `TRUNCATE TABLE`
-  * rereads the whole source prefix
-  * refreshes checkpoint state from the rebuild
-* `append`
-  * lists source parquet files under `SOURCE_PATH`
-  * filters out files already present in the checkpoint
-  * reads only new files
-  * updates the checkpoint only after a successful append
-  * logs inserted source-file count, not a post-write full-table row count
+* namespace:
+  * `<customer_slug>_<dataset_slug>`
+* catalog table name:
+  * `<dataset_slug>_service_hour`
+* Glue job name:
+  * `<name_prefix>-<customer_slug>-<environment>`
+* Glue role name:
+  * `<name_prefix>-<customer_slug>-glue-<environment>`
+* Snowflake read role name:
+  * `<name_prefix>-<customer_slug>-snowflake-<environment>`
 
-Checkpoint behavior:
+Hyphens are normalized to underscores for Iceberg and Snowflake identifiers.
 
-* if `CHECKPOINT_URI` is omitted, the script derives one from the source path:
-  * `<source-prefix>/_checkpoint/<namespace>/<table>/processed-files.json`
-* current checkpoint format is JSON with a `processed_files` array
-* `append` is the supported mode for ongoing ingestion
-* `replace` is for rebuilds and controlled benchmark resets
-* pause the recurring trigger before `replace`, then resume it after the rebuild
+If a customer already has fixed naming standards, override the explicit name
+inputs in [`terraform/`](terraform/).
 
-Required Spark runtime settings:
+## Prerequisites
 
-* Glue version `5.0`
-* `--datalake-formats iceberg`
-* `--extra-jars` pointing at the S3 Tables runtime jar
-* `--conf spark.sql.extensions=org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions`
+Before the first apply, have:
 
-## Snowflake setup
+* a source bucket and source prefix with Parquet files
+* an existing S3 Tables bucket
+* an artifact bucket for Glue scripts and the runtime jar
+* the S3 Tables runtime jar already uploaded
+* an AWS account where Glue, Lake Formation, and S3 Tables are available
+* a Snowflake account where you can run `ACCOUNTADMIN` setup steps
 
-Use `snowflake/setup.sql` to:
+## Quick start
 
-* create the Glue REST catalog integration
-* create a direct Iceberg table
-* run baseline sanity checks and query templates
+### 1. Fill in Terraform inputs
+
+Start from:
+
+* [`terraform/terraform.tfvars.example`](terraform/terraform.tfvars.example)
+
+At minimum, set:
+
+* `environment`
+* `customer_slug`
+* `artifact_bucket`
+* `artifact_prefix`
+* `source_bucket`
+* `source_prefix`
+* `table_bucket_arn`
+* `s3tables_runtime_jar_s3_uri`
+
+### 2. Bootstrap AWS resources
+
+Run the Terraform module in [`terraform/`](terraform/).
+
+First apply should:
+
+* create bridge resources
+* optionally create the Snowflake read role
+* leave `snowflake_bootstrap_trust_enabled = true`
+* leave `snowflake_external_id` unset
+* leave `grant_snowflake_lakeformation_permissions = false`
+
+### 3. Create Snowflake objects
+
+Use:
+
+* [`snowflake/setup.sql`](snowflake/setup.sql)
+
+That script:
+
+* derives Snowflake object names from the same slug model
+* creates the Glue REST catalog integration
+* creates a direct Iceberg table
+* runs basic sanity queries
 
 Important:
 
-* for S3 Tables, `CATALOG_NAME` must be bucket-scoped:
-  * `<aws-account-id>:s3tablescatalog/<table-bucket-name>`
-* `ACCESS_DELEGATION_MODE = VENDED_CREDENTIALS` is required on the Snowflake
-  integration
-* `CREATE OR REPLACE CATALOG INTEGRATION` rotates the Snowflake-generated
-  external ID, so the AWS trust policy must be refreshed from `DESCRIBE
-  INTEGRATION`
-* Snowflake refresh stays stable only if the S3 Tables table identity stays
-  stable; do not implement rebuilds by dropping and recreating the target table
-* the Snowflake AWS role needs both:
-  * Glue and Lake Formation read access
-  * S3 Tables read access, for example `AmazonS3TablesReadOnlyAccess`
+* `CREATE OR REPLACE CATALOG INTEGRATION` rotates Snowflake's external ID
+* after running the script, capture the output of:
+  * `DESCRIBE INTEGRATION`
 
-## Customer-safe cut
+### 4. Lock the AWS trust policy
 
-Include:
+Re-apply Terraform with:
 
-* `glue_job/`
+* `snowflake_external_id` set
+* `snowflake_bootstrap_trust_enabled = false`
+
+### 5. Run the first rebuild
+
+Run one Glue job with:
+
+* `MODE=replace`
+
+This creates or refreshes the target table from the full source prefix.
+
+### 6. Grant Lake Formation table access
+
+After the table exists, re-apply Terraform with:
+
+* `grant_snowflake_lakeformation_permissions = true`
+
+### 7. Refresh and validate in Snowflake
+
+Refresh or recreate the Snowflake Iceberg table, then verify:
+
+* row count
+* min/max `ts`
+* benchmark starter queries
+
+### 8. Turn on ongoing ingestion
+
+Enable the recurring Glue trigger.
+
+The supported steady-state mode is:
+
+* scheduled `append`
+* checkpointed file discovery
+* Snowflake `auto_refresh = true`
+
+## Rebuild workflow
+
+When you need a full rebuild:
+
+1. disable the recurring trigger
+2. start a one-off Glue run with `MODE=replace`
+3. refresh Snowflake
+4. re-enable the trigger
+
+Do not rebuild by dropping and recreating the S3 Tables table.
+That breaks Snowflake object stability.
+
+## Validation
+
+Local validation:
+
+```bash
+terraform -chdir=terraform init -backend=false
+terraform -chdir=terraform validate
+PYTHONPATH=glue_job python3 -m unittest discover -s glue_job/tests -p 'test_*.py' -v
+trunk check --all
+```
+
+## Trunk
+
+This repo includes Trunk with a narrow repo-shaped lint set:
+
+* `ruff`
+* `markdownlint`
+* `shellcheck`
+* `shfmt`
+* `tflint`
+* `git-diff-check`
+
+`sqlfluff` is installed but the current Snowflake setup script is ignored,
+because it uses valid Snowflake scripting constructs that SQLFluff does not
+parse cleanly in this form.
+
+Useful commands:
+
+```bash
+trunk check --all
+trunk fmt
+trunk upgrade
+```
+
+## Troubleshooting
+
+### Snowflake cannot read the table
+
+Check:
+
+* the AWS trust policy includes the current Snowflake external ID
+* the Snowflake read role has S3 Tables read access
+* Lake Formation grants exist on the target namespace and table
+* the Snowflake table points at the current logical Iceberg table identity
+
+### Glue keeps re-reading old data
+
+Check:
+
+* the job is running `append`, not `replace`
+* the checkpoint file exists
+* the checkpoint path matches the resolved namespace and table name
+
+### Rebuild succeeded but Snowflake sees stale data
+
+Check:
+
+* the rebuild used `TRUNCATE TABLE`, not drop/recreate semantics
+* Snowflake table refresh ran after the rebuild
+* Lake Formation grants still point to the current table
+
+## Customer handoff
+
+Safe to hand off:
+
 * `terraform/`
+* `glue_job/`
 * `snowflake/setup.sql`
+* this `README.md`
 
-Exclude:
+Do not hand off:
 
-* `terraform.tfstate*`
-* environment-specific examples
-* environment-specific benchmark queries, runbooks, and result captures
+* local `terraform.tfstate*`
+* `.trunk/` cache directories
+* environment-specific benchmark or staging result files
