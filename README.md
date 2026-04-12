@@ -34,6 +34,8 @@ Do not use this repo when:
   Glue Spark bridge logic
 * [`snowflake/setup.sql`](snowflake/setup.sql)
   Snowflake-side integration and table setup template
+* [`CUSTOMER_HANDOFF.md`](CUSTOMER_HANDOFF.md)
+  deployment checklist for customer installs
 
 ## What it manages
 
@@ -113,6 +115,16 @@ Before the first apply, have:
 * the S3 Tables runtime jar already uploaded
 * an AWS account where Glue, Lake Formation, and S3 Tables are available
 * a Snowflake account where you can run `ACCOUNTADMIN` setup steps
+
+## Versioning
+
+Customers should consume a pinned git tag, not floating `main`.
+
+Use:
+
+* a release tag in the Terraform module source
+* the matching repo contents for `snowflake/setup.sql`
+* the matching handoff checklist in [`CUSTOMER_HANDOFF.md`](CUSTOMER_HANDOFF.md)
 
 ## Quick start
 
@@ -219,6 +231,47 @@ The supported steady-state mode is:
 
 This is continuous micro-batch ingestion.
 It is not true row-streaming.
+
+## Sizing guidance
+
+There are two different sizing problems:
+
+* bootstrap backfill
+  * one-time `replace`
+  * reads the full historical source prefix
+  * usually needs more workers
+* steady-state ingestion
+  * recurring `append`
+  * reads only files not yet in the checkpoint
+  * usually needs fewer workers
+
+Practical starting points:
+
+* small backlog
+  * source prefix has a small historical footprint
+  * start with `2 x G.1X`
+* medium backlog
+  * many hours or days of retained Parquet
+  * start with `5 x G.1X`
+* large backlog
+  * large historical catch-up or multi-GB prefix
+  * start with `10 x G.1X` for the first `replace`
+
+After the first successful `replace`:
+
+* scale `number_of_workers` back down
+* leave steady-state on smaller scheduled `append` workers
+
+Signs the bootstrap backfill is undersized:
+
+* the first `replace` runs for a long time before writing the checkpoint
+* the first `replace` makes little visible progress on a large source prefix
+* steady-state append is fine, but historical bootstrap is slow
+
+Sizing rule:
+
+* size the initial `replace` for total backlog
+* size scheduled `append` for new-file arrival rate
 
 ## Rebuild workflow
 

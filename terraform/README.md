@@ -89,7 +89,7 @@ Key optional inputs:
 
 ```hcl
 module "iceberg_bridge" {
-  source = "git::ssh://git@github.com/<org>/sawmills-iceberg-bridge.git//terraform?ref=<tag-or-branch>"
+  source = "git::ssh://git@github.com/<org>/sawmills-iceberg-bridge.git//terraform?ref=<release-tag>"
 
   environment                 = "customer"
   customer_slug               = "acme"
@@ -185,6 +185,33 @@ For larger historical bootstrap backfills, temporarily raise
 `number_of_workers` for the one-off `replace` run, then scale it back down for
 steady-state scheduled `append`.
 
+## Sizing guidance
+
+Use different worker sizing for the two phases:
+
+* bootstrap backfill
+  * one-time `replace`
+  * sized for the full historical source prefix
+* steady-state append
+  * recurring scheduled `append`
+  * sized for ongoing new-file volume only
+
+Starting points:
+
+* small backlog: `2 x G.1X`
+* medium backlog: `5 x G.1X`
+* large backlog: `10 x G.1X` for the first `replace`
+
+After the first successful `replace`:
+
+* reduce `number_of_workers`
+* keep scheduled `append` sized for normal ingestion, not for the initial catch-up
+
+Common symptom of under-sizing:
+
+* the bootstrap `replace` runs for a long time before checkpoint creation, even
+  though the same deployment handles incremental `append` runs normally
+
 ## Replace run
 
 The recurring trigger always runs `append`.
@@ -206,6 +233,7 @@ Good to expose:
 * `terraform/`
 * `glue_job/`
 * `snowflake/setup.sql`
+* `CUSTOMER_HANDOFF.md`
 
 Do not expose as part of the customer bundle:
 
