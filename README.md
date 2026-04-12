@@ -22,6 +22,7 @@ Use this repo when:
 Do not use this repo when:
 
 * you need sub-minute streaming freshness
+* you need true row-by-row streaming rather than scheduled micro-batch ingestion
 * you want this repo to create the S3 Tables bucket itself
 * you want Snowflake objects fully managed by Terraform in this repo
 
@@ -144,7 +145,7 @@ First apply should:
 * leave `snowflake_external_id` unset
 * leave `grant_snowflake_lakeformation_permissions = false`
 
-### 3. Create Snowflake objects
+### 3. Create the Snowflake integration
 
 Use:
 
@@ -154,14 +155,16 @@ That script:
 
 * derives Snowflake object names from the same slug model
 * creates the Glue REST catalog integration
-* creates a direct Iceberg table
-* runs basic sanity queries
+* can be rerun safely after the AWS trust policy is updated
+* creates the direct Iceberg table once the trust policy is ready
+* runs basic sanity queries after the table exists
 
 Important:
 
-* `CREATE OR REPLACE CATALOG INTEGRATION` rotates Snowflake's external ID
-* after running the script, capture the output of:
+* on the first run, capture the output of:
   * `DESCRIBE INTEGRATION`
+* use the Snowflake IAM user ARN and external ID from that output in the
+  second Terraform apply
 
 ### 4. Lock the AWS trust policy
 
@@ -177,6 +180,8 @@ Run one Glue job with:
 * `MODE=replace`
 
 This creates or refreshes the target table from the full source prefix.
+For larger historical backfills, temporarily raise `number_of_workers` for the
+replace run, then scale it back down for steady-state append.
 
 ### 6. Grant Lake Formation table access
 
@@ -184,7 +189,17 @@ After the table exists, re-apply Terraform with:
 
 * `grant_snowflake_lakeformation_permissions = true`
 
-### 7. Refresh and validate in Snowflake
+### 7. Re-run Snowflake setup
+
+Run the same [`snowflake/setup.sql`](snowflake/setup.sql) again.
+
+Because the integration is now created with `IF NOT EXISTS`, the second run:
+
+* reuses the same integration
+* does not rotate the external ID
+* creates or refreshes the Snowflake Iceberg table cleanly
+
+### 8. Refresh and validate in Snowflake
 
 Refresh or recreate the Snowflake Iceberg table, then verify:
 
@@ -192,7 +207,7 @@ Refresh or recreate the Snowflake Iceberg table, then verify:
 * min/max `ts`
 * benchmark starter queries
 
-### 8. Turn on ongoing ingestion
+### 9. Turn on ongoing ingestion
 
 Enable the recurring Glue trigger.
 
@@ -201,6 +216,9 @@ The supported steady-state mode is:
 * scheduled `append`
 * checkpointed file discovery
 * Snowflake `auto_refresh = true`
+
+This is continuous micro-batch ingestion.
+It is not true row-streaming.
 
 ## Rebuild workflow
 

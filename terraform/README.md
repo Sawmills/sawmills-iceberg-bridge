@@ -79,6 +79,7 @@ Key optional inputs:
 * `timeout_minutes`
 * `create_snowflake_read_role`
 * `snowflake_iam_user_arn`
+* `snowflake_bootstrap_principal_arn`
 * `snowflake_external_id`
 * `snowflake_bootstrap_trust_enabled`
 * `grant_snowflake_lakeformation_permissions`
@@ -100,7 +101,6 @@ module "iceberg_bridge" {
   table_bucket_arn            = "arn:aws:s3tables:TODO_REGION:TODO_AWS_ACCOUNT_ID:bucket/TODO_TABLE_BUCKET_NAME"
   s3tables_runtime_jar_s3_uri = "s3://TODO_ARTIFACT_BUCKET/TODO_RUNTIME_JAR_PREFIX/s3-tables-catalog-for-iceberg-runtime-0.1.8.jar"
   create_snowflake_read_role  = true
-  snowflake_iam_user_arn      = "arn:aws:iam::TODO_SNOWFLAKE_AWS_ACCOUNT_ID:user/TODO_SNOWFLAKE_IAM_USER"
   snowflake_bootstrap_trust_enabled = true
 
   tags = {
@@ -132,6 +132,11 @@ If a customer already has strict naming standards, override any of these with:
 * `namespace`
 * `table_name`
 
+For a true first apply, `snowflake_iam_user_arn` can stay unset.
+When bootstrap trust is enabled, the module temporarily trusts the table bucket
+account root, purely so the role exists before Snowflake generates the real
+IAM user ARN and external ID.
+
 ## Apply flow
 
 1. Ensure the target S3 Tables bucket already exists.
@@ -141,13 +146,18 @@ If a customer already has strict naming standards, override any of these with:
    * optional Snowflake read role in bootstrap trust mode
 4. Run the Snowflake-side setup from [`../snowflake/setup.sql`](../snowflake/setup.sql).
 5. Read the Snowflake-generated external ID from `DESCRIBE INTEGRATION`.
-6. Re-apply with:
+6. Read the Snowflake-generated IAM user ARN from `DESCRIBE INTEGRATION`.
+7. Re-apply with:
+   * `snowflake_iam_user_arn` set
    * `snowflake_external_id` set
    * `snowflake_bootstrap_trust_enabled = false`
-7. After the first `replace` run creates the table, re-apply with:
+8. Run the first one-off Glue rebuild with `MODE=replace` so the S3 Tables
+   catalog table exists.
+9. Re-apply with:
    * `grant_snowflake_lakeformation_permissions = true`
-8. Create or refresh the Snowflake Iceberg table.
-9. Validate freshness with customer-specific queries against the source and Iceberg paths.
+10. Re-run [`../snowflake/setup.sql`](../snowflake/setup.sql) to create or
+    refresh the Snowflake Iceberg table without rotating the integration trust.
+11. Validate freshness with customer-specific queries against the source and Iceberg paths.
 
 The Snowflake/AWS trust handshake is intentionally two-phase:
 
@@ -161,13 +171,19 @@ Recommended variable-file flow:
 1. Start from `terraform.tfvars.example`.
 2. Phase 1:
    * keep `snowflake_bootstrap_trust_enabled = true`
+   * leave `snowflake_iam_user_arn` unset
    * leave `snowflake_external_id` unset
    * keep `grant_snowflake_lakeformation_permissions = false`
 3. Phase 2:
+   * set `snowflake_iam_user_arn`
    * set `snowflake_external_id`
    * change `snowflake_bootstrap_trust_enabled = false`
 4. Phase 3:
    * set `grant_snowflake_lakeformation_permissions = true`
+
+For larger historical bootstrap backfills, temporarily raise
+`number_of_workers` for the one-off `replace` run, then scale it back down for
+steady-state scheduled `append`.
 
 ## Replace run
 

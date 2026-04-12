@@ -42,11 +42,16 @@ additional_default_arguments = {}
 
 # AWS-side Snowflake read path.
 create_snowflake_read_role = true
-snowflake_iam_user_arn     = "arn:aws:iam::TODO_SNOWFLAKE_AWS_ACCOUNT_ID:user/TODO_SNOWFLAKE_IAM_USER"
+# Optional on phase 1. Leave unset during bootstrap if you do not know it yet.
+# snowflake_iam_user_arn   = "arn:aws:iam::TODO_SNOWFLAKE_AWS_ACCOUNT_ID:user/TODO_SNOWFLAKE_IAM_USER"
+# Optional bootstrap override. If unset, the module temporarily trusts the
+# table bucket account root only for phase 1.
+# snowflake_bootstrap_principal_arn = "arn:aws:iam::TODO_AWS_ACCOUNT_ID:root"
 
 # Phase 1 bootstrap:
 # - first apply with bootstrap trust enabled
 # - do not set snowflake_external_id yet
+# - snowflake_iam_user_arn can stay unset until after DESCRIBE INTEGRATION
 snowflake_bootstrap_trust_enabled = true
 # snowflake_external_id = "TODO_SNOWFLAKE_EXTERNAL_ID"
 

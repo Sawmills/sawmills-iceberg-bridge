@@ -15,8 +15,16 @@ locals {
   table_bucket_name              = element(split("/", var.table_bucket_arn), 1)
   table_bucket_account_id        = element(split(":", var.table_bucket_arn), 4)
   lakeformation_catalog_id       = "${local.table_bucket_account_id}:s3tablescatalog/${local.table_bucket_name}"
-  namespace                      = coalesce(var.namespace, "${local.customer_slug_sql}_${local.dataset_slug_sql}")
-  table_name                     = coalesce(var.table_name, "${local.dataset_slug_sql}_service_hour")
+  snowflake_bootstrap_principal_arn = coalesce(
+    var.snowflake_bootstrap_principal_arn,
+    "arn:${data.aws_partition.current.partition}:iam::${local.table_bucket_account_id}:root",
+  )
+  snowflake_trust_principal_arn = coalesce(
+    var.snowflake_iam_user_arn,
+    local.snowflake_bootstrap_principal_arn,
+  )
+  namespace  = coalesce(var.namespace, "${local.customer_slug_sql}_${local.dataset_slug_sql}")
+  table_name = coalesce(var.table_name, "${local.dataset_slug_sql}_service_hour")
 
   glue_job_name     = coalesce(var.job_name, "${var.name_prefix}-${var.customer_slug}-${var.environment}")
   glue_role_name    = coalesce(var.glue_role_name, "${var.name_prefix}-${var.customer_slug}-glue-${var.environment}")
@@ -171,7 +179,7 @@ resource "aws_iam_role" "snowflake_read" {
         {
           Effect = "Allow"
           Principal = {
-            AWS = var.snowflake_iam_user_arn
+            AWS = local.snowflake_trust_principal_arn
           }
           Action = "sts:AssumeRole"
         },
@@ -190,8 +198,8 @@ resource "aws_iam_role" "snowflake_read" {
 
   lifecycle {
     precondition {
-      condition     = var.snowflake_iam_user_arn != null
-      error_message = "snowflake_iam_user_arn is required when create_snowflake_read_role is true."
+      condition     = var.snowflake_iam_user_arn != null || var.snowflake_bootstrap_trust_enabled
+      error_message = "Set snowflake_iam_user_arn or explicitly enable snowflake_bootstrap_trust_enabled for the first apply."
     }
 
     precondition {

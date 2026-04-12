@@ -27,19 +27,31 @@ set CUSTOMER_SLUG = 'TODO_CUSTOMER_SLUG';
 set DATASET_SLUG  = 'logs';
 set ENVIRONMENT   = 'customer';
 
-set NORMALIZED_CUSTOMER_SLUG = replace($CUSTOMER_SLUG, '-', '_');
-set NORMALIZED_DATASET_SLUG  = replace($DATASET_SLUG, '-', '_');
-set NORMALIZED_ENVIRONMENT   = replace($ENVIRONMENT, '-', '_');
+set NORMALIZED_CUSTOMER_SLUG = (
+  select replace($CUSTOMER_SLUG, '-', '_')
+);
+set NORMALIZED_DATASET_SLUG = (
+  select replace($DATASET_SLUG, '-', '_')
+);
+set NORMALIZED_ENVIRONMENT = (
+  select replace($ENVIRONMENT, '-', '_')
+);
 
-set NAMESPACE = $NORMALIZED_CUSTOMER_SLUG || '_' || $NORMALIZED_DATASET_SLUG;
-set CATALOG_TABLE_NAME = $NORMALIZED_DATASET_SLUG || '_service_hour';
-set INTEGRATION_NAME = upper(
-  $NORMALIZED_CUSTOMER_SLUG || '_S3TABLES_GLUE_REST_INT_' || $NORMALIZED_ENVIRONMENT
+set NAMESPACE = (
+  select $NORMALIZED_CUSTOMER_SLUG || '_' || $NORMALIZED_DATASET_SLUG
 );
-set ICEBERG_TABLE_NAME = upper(
-  $NORMALIZED_CUSTOMER_SLUG || '_' || $NORMALIZED_DATASET_SLUG || '_SERVICE_HOUR'
+set CATALOG_TABLE_NAME = (
+  select $NORMALIZED_DATASET_SLUG || '_service_hour'
 );
-set CATALOG_NAME = $AWS_ACCOUNT_ID || ':s3tablescatalog/' || $TABLE_BUCKET_NAME;
+set INTEGRATION_NAME = (
+  select upper($NORMALIZED_CUSTOMER_SLUG || '_S3TABLES_GLUE_REST_INT_' || $NORMALIZED_ENVIRONMENT)
+);
+set ICEBERG_TABLE_NAME = (
+  select upper($NORMALIZED_CUSTOMER_SLUG || '_' || $NORMALIZED_DATASET_SLUG || '_SERVICE_HOUR')
+);
+set CATALOG_NAME = (
+  select $AWS_ACCOUNT_ID || ':s3tablescatalog/' || $TABLE_BUCKET_NAME
+);
 
 use role ACCOUNTADMIN;
 use warehouse identifier($WAREHOUSE_NAME);
@@ -51,7 +63,15 @@ create schema if not exists identifier($SCHEMA_NAME);
 use schema identifier($SCHEMA_NAME);
 
 -- 1. Catalog integration to AWS Glue Iceberg REST.
-create or replace catalog integration identifier($INTEGRATION_NAME)
+-- The first run creates the integration and exposes the Snowflake IAM user ARN
+-- plus external ID through DESCRIBE INTEGRATION. Re-running this script after
+-- the AWS trust policy is updated is safe because IF NOT EXISTS avoids
+-- rotating the external ID again.
+--
+-- If you intentionally need to change integration-level properties after the
+-- integration already exists, recreate it deliberately and then refresh the
+-- AWS trust policy with the new external ID.
+create catalog integration if not exists identifier($INTEGRATION_NAME)
   catalog_source = ICEBERG_REST
   table_format = ICEBERG
   catalog_namespace = $NAMESPACE
@@ -69,8 +89,6 @@ create or replace catalog integration identifier($INTEGRATION_NAME)
   enabled = true;
 
 -- 2. Inspect the generated trust details and wire them into the AWS IAM role.
--- CREATE OR REPLACE rotates the external ID, so refresh the AWS trust policy
--- every time this integration is recreated.
 describe integration identifier($INTEGRATION_NAME);
 
 -- 3. Optional catalog-linked database.
@@ -80,6 +98,15 @@ describe integration identifier($INTEGRATION_NAME);
 --   );
 
 -- 4. Or create a direct table object in the current schema.
+-- If this is the first Snowflake-side run, the statement below can still fail
+-- until:
+--   * the AWS trust policy is locked with the Snowflake IAM user ARN and
+--     external ID from DESCRIBE INTEGRATION
+--   * the first Glue replace run has created the catalog table in S3 Tables
+--   * Lake Formation grants have been applied on that table
+--
+-- After those steps, rerun this same script. The integration will be reused
+-- and only the table creation plus sanity checks will advance.
 create or replace iceberg table identifier($ICEBERG_TABLE_NAME)
   catalog = $INTEGRATION_NAME
   catalog_namespace = $NAMESPACE

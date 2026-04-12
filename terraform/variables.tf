@@ -185,6 +185,12 @@ variable "snowflake_iam_user_arn" {
   default     = null
 }
 
+variable "snowflake_bootstrap_principal_arn" {
+  description = "Optional temporary AWS principal ARN to trust during the first apply before Snowflake reveals its IAM user ARN. Defaults to the table bucket account root when bootstrap trust is enabled."
+  type        = string
+  default     = null
+}
+
 variable "snowflake_external_id" {
   description = "Snowflake external ID from DESCRIBE INTEGRATION. Leave null only during the initial bootstrap apply."
   type        = string
