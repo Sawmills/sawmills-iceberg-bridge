@@ -33,6 +33,16 @@ output "checkpoint_uri" {
   value       = local.checkpoint_uri
 }
 
+output "resolved_namespace" {
+  description = "Resolved Iceberg namespace after slug-derived defaults."
+  value       = local.namespace
+}
+
+output "resolved_table_name" {
+  description = "Resolved Iceberg table name after slug-derived defaults."
+  value       = local.table_name
+}
+
 output "bridge_script_s3_uri" {
   description = "S3 URI for the uploaded bridge.py script."
   value       = "s3://${var.artifact_bucket}/${aws_s3_object.bridge.key}"
@@ -54,9 +64,9 @@ output "manual_replace_arguments" {
     "--CATALOG_NAME"     = var.catalog_name
     "--CHECKPOINT_URI"   = local.checkpoint_uri
     "--MODE"             = "replace"
-    "--NAMESPACE"        = var.namespace
+    "--NAMESPACE"        = local.namespace
     "--SOURCE_PATH"      = local.source_path
     "--TABLE_BUCKET_ARN" = var.table_bucket_arn
-    "--TABLE_NAME"       = var.table_name
+    "--TABLE_NAME"       = local.table_name
   }
 }

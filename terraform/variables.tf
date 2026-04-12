@@ -7,6 +7,32 @@ variable "name_prefix" {
 variable "environment" {
   description = "Environment suffix for resource naming."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]*$", var.environment))
+    error_message = "environment must use lowercase letters, digits, and hyphens only."
+  }
+}
+
+variable "customer_slug" {
+  description = "Short customer slug used to derive default resource and table names."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]*$", var.customer_slug))
+    error_message = "customer_slug must use lowercase letters, digits, and hyphens only."
+  }
+}
+
+variable "dataset_slug" {
+  description = "Short dataset slug used to derive default namespace and table names."
+  type        = string
+  default     = "logs"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9-]*$", var.dataset_slug))
+    error_message = "dataset_slug must use lowercase letters, digits, and hyphens only."
+  }
 }
 
 variable "job_name" {
@@ -59,13 +85,15 @@ variable "catalog_name" {
 }
 
 variable "namespace" {
-  description = "Target Iceberg namespace."
+  description = "Optional explicit Iceberg namespace. Defaults to <customer_slug>_<dataset_slug> with hyphens normalized to underscores."
   type        = string
+  default     = null
 }
 
 variable "table_name" {
-  description = "Target Iceberg table name."
+  description = "Optional explicit Iceberg table name. Defaults to <dataset_slug>_service_hour with hyphens normalized to underscores."
   type        = string
+  default     = null
 }
 
 variable "schedule_expression" {

@@ -1,12 +1,17 @@
 # Base naming.
 name_prefix = "sawmills-iceberg-bridge"
 environment = "customer"
+customer_slug = "todo-customer"
+dataset_slug  = "logs"
 
-# Optional explicit names. Leave null unless you need deterministic names.
+# Optional explicit names. Leave null unless you need fixed names that do not
+# follow the slug-derived defaults.
 # job_name            = null
 # glue_role_name      = null
 # trigger_name        = null
 # snowflake_read_role_name = null
+# namespace           = null
+# table_name          = null
 
 # Artifact and source locations.
 artifact_bucket = "TODO_ARTIFACT_BUCKET"
@@ -17,8 +22,6 @@ source_prefix   = "TODO_SOURCE_PREFIX"
 # Target S3 Tables objects.
 table_bucket_arn = "arn:aws:s3tables:TODO_REGION:TODO_AWS_ACCOUNT_ID:bucket/TODO_TABLE_BUCKET_NAME"
 catalog_name     = "s3tablesbp"
-namespace        = "customer_logs"
-table_name       = "logs_service_hour"
 
 # Runtime artifact. This jar must already exist.
 s3tables_runtime_jar_s3_uri = "s3://TODO_ARTIFACT_BUCKET/TODO_RUNTIME_JAR_PREFIX/s3-tables-catalog-for-iceberg-runtime-0.1.8.jar"

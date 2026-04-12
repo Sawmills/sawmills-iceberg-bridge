@@ -57,17 +57,19 @@ It includes:
 Required:
 
 * `environment`
+* `customer_slug`
 * `artifact_bucket`
 * `artifact_prefix`
 * `source_bucket`
 * `source_prefix`
 * `table_bucket_arn`
-* `namespace`
-* `table_name`
 * `s3tables_runtime_jar_s3_uri`
 
 Key optional inputs:
 
+* `dataset_slug`
+* `namespace`
+* `table_name`
 * `catalog_name`
 * `schedule_expression`
 * `create_schedule`
@@ -89,13 +91,13 @@ module "iceberg_bridge" {
   source = "git::ssh://git@github.com/<org>/sawmills-iceberg-bridge.git//terraform?ref=<tag-or-branch>"
 
   environment                 = "customer"
+  customer_slug               = "acme"
+  dataset_slug                = "logs"
   artifact_bucket             = "TODO_ARTIFACT_BUCKET"
   artifact_prefix             = "iceberg-bridge/customer"
   source_bucket               = "TODO_SOURCE_BUCKET"
   source_prefix               = "TODO_SOURCE_PREFIX"
   table_bucket_arn            = "arn:aws:s3tables:TODO_REGION:TODO_AWS_ACCOUNT_ID:bucket/TODO_TABLE_BUCKET_NAME"
-  namespace                   = "customer_logs"
-  table_name                  = "logs_service_hour"
   s3tables_runtime_jar_s3_uri = "s3://TODO_ARTIFACT_BUCKET/TODO_RUNTIME_JAR_PREFIX/s3-tables-catalog-for-iceberg-runtime-0.1.8.jar"
   create_snowflake_read_role  = true
   snowflake_iam_user_arn      = "arn:aws:iam::TODO_SNOWFLAKE_AWS_ACCOUNT_ID:user/TODO_SNOWFLAKE_IAM_USER"
@@ -107,6 +109,28 @@ module "iceberg_bridge" {
   }
 }
 ```
+
+## Naming defaults
+
+The module derives the customer-facing names from a small canonical input set:
+
+* namespace: `<customer_slug>_<dataset_slug>`
+* table name: `<dataset_slug>_service_hour`
+* Glue job name: `<name_prefix>-<customer_slug>-<environment>`
+* Glue role name: `<name_prefix>-<customer_slug>-glue-<environment>`
+* Snowflake read role name: `<name_prefix>-<customer_slug>-snowflake-<environment>`
+
+Hyphens in `customer_slug` and `dataset_slug` are normalized to underscores for
+Iceberg and Snowflake identifiers.
+
+If a customer already has strict naming standards, override any of these with:
+
+* `job_name`
+* `glue_role_name`
+* `trigger_name`
+* `snowflake_read_role_name`
+* `namespace`
+* `table_name`
 
 ## Apply flow
 

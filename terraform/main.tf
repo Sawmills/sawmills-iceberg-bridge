@@ -4,6 +4,8 @@ locals {
   source_prefix_trimmed   = trimsuffix(var.source_prefix, "/")
   artifact_prefix_trimmed = trimsuffix(var.artifact_prefix, "/")
   runtime_jar_uri_trimmed = trimsuffix(var.s3tables_runtime_jar_s3_uri, "/")
+  customer_slug_sql       = replace(var.customer_slug, "-", "_")
+  dataset_slug_sql        = replace(var.dataset_slug, "-", "_")
 
   runtime_jar_uri_without_scheme = trimprefix(local.runtime_jar_uri_trimmed, "s3://")
   runtime_jar_path_parts         = split("/", local.runtime_jar_uri_without_scheme)
@@ -13,17 +15,19 @@ locals {
   table_bucket_name              = element(split("/", var.table_bucket_arn), 1)
   table_bucket_account_id        = element(split(":", var.table_bucket_arn), 4)
   lakeformation_catalog_id       = "${local.table_bucket_account_id}:s3tablescatalog/${local.table_bucket_name}"
+  namespace                      = coalesce(var.namespace, "${local.customer_slug_sql}_${local.dataset_slug_sql}")
+  table_name                     = coalesce(var.table_name, "${local.dataset_slug_sql}_service_hour")
 
-  glue_job_name     = coalesce(var.job_name, "${var.name_prefix}-${var.environment}")
-  glue_role_name    = coalesce(var.glue_role_name, "${var.name_prefix}-glue-${var.environment}")
+  glue_job_name     = coalesce(var.job_name, "${var.name_prefix}-${var.customer_slug}-${var.environment}")
+  glue_role_name    = coalesce(var.glue_role_name, "${var.name_prefix}-${var.customer_slug}-glue-${var.environment}")
   glue_trigger_name = coalesce(var.trigger_name, "${local.glue_job_name}-every-5m")
   snowflake_role_name = coalesce(
     var.snowflake_read_role_name,
-    "${var.name_prefix}-snowflake-${var.environment}",
+    "${var.name_prefix}-${var.customer_slug}-snowflake-${var.environment}",
   )
 
   source_path     = "s3://${var.source_bucket}/${local.source_prefix_trimmed}/"
-  checkpoint_uri  = "s3://${var.source_bucket}/${local.source_prefix_trimmed}/_checkpoint/${var.namespace}/${var.table_name}/processed-files.json"
+  checkpoint_uri  = "s3://${var.source_bucket}/${local.source_prefix_trimmed}/_checkpoint/${local.namespace}/${local.table_name}/processed-files.json"
   temp_dir        = "s3://${var.artifact_bucket}/${local.artifact_prefix_trimmed}/tmp/"
   bridge_script   = "${local.artifact_prefix_trimmed}/glue_job/bridge.py"
   bridge_logic    = "${local.artifact_prefix_trimmed}/glue_job/bridge_logic.py"
@@ -65,10 +69,10 @@ locals {
     "--CATALOG_NAME"     = var.catalog_name
     "--CHECKPOINT_URI"   = local.checkpoint_uri
     "--MODE"             = "append"
-    "--NAMESPACE"        = var.namespace
+    "--NAMESPACE"        = local.namespace
     "--SOURCE_PATH"      = local.source_path
     "--TABLE_BUCKET_ARN" = var.table_bucket_arn
-    "--TABLE_NAME"       = var.table_name
+    "--TABLE_NAME"       = local.table_name
   }
 }
 
@@ -257,8 +261,8 @@ resource "aws_lakeformation_permissions" "snowflake_role_table_describe" {
 
   table {
     catalog_id    = local.lakeformation_catalog_id
-    database_name = var.namespace
-    name          = var.table_name
+    database_name = local.namespace
+    name          = local.table_name
   }
 }
 
@@ -270,8 +274,8 @@ resource "aws_lakeformation_permissions" "snowflake_role_table_select" {
 
   table_with_columns {
     catalog_id    = local.lakeformation_catalog_id
-    database_name = var.namespace
-    name          = var.table_name
+    database_name = local.namespace
+    name          = local.table_name
     wildcard      = true
   }
 }
@@ -284,8 +288,8 @@ resource "aws_lakeformation_permissions" "snowflake_user_table_describe" {
 
   table {
     catalog_id    = local.lakeformation_catalog_id
-    database_name = var.namespace
-    name          = var.table_name
+    database_name = local.namespace
+    name          = local.table_name
   }
 }
 
@@ -297,8 +301,8 @@ resource "aws_lakeformation_permissions" "snowflake_user_table_select" {
 
   table_with_columns {
     catalog_id    = local.lakeformation_catalog_id
-    database_name = var.namespace
-    name          = var.table_name
+    database_name = local.namespace
+    name          = local.table_name
     wildcard      = true
   }
 }

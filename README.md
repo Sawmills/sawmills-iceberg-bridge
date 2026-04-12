@@ -39,9 +39,16 @@ Optional arg:
 Recommended first run:
 
 * `CATALOG_NAME=s3tablesbp`
-* `NAMESPACE=<customer_namespace>`
-* `TABLE_NAME=logs_service_hour`
+* `NAMESPACE=<customer_slug>_<dataset_slug>`
+* `TABLE_NAME=<dataset_slug>_service_hour`
 * `MODE=replace`
+
+Recommended naming model:
+
+* `customer_slug`
+* `dataset_slug`
+* derive namespace and table name from those
+* only override the explicit names if the customer already has fixed standards
 
 Bridge modes:
 
