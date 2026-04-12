@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .trunk/actions/
+.trunk/.gitignore
 .trunk/logs/
 .trunk/notifications/
 .trunk/out/
