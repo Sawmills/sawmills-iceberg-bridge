@@ -1,6 +1,12 @@
 __pycache__/
 *.pyc
 .DS_Store
+.trunk/actions/
+.trunk/logs/
+.trunk/notifications/
+.trunk/out/
+.trunk/plugins/
+.trunk/tools/
 
 terraform/.terraform/
 terraform/terraform.tfstate
