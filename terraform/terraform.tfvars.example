@@ -1,0 +1,59 @@
+# Base naming.
+name_prefix = "sawmills-iceberg-bridge"
+environment = "customer"
+
+# Optional explicit names. Leave null unless you need deterministic names.
+# job_name            = null
+# glue_role_name      = null
+# trigger_name        = null
+# snowflake_read_role_name = null
+
+# Artifact and source locations.
+artifact_bucket = "TODO_ARTIFACT_BUCKET"
+artifact_prefix = "iceberg-bridge/customer"
+source_bucket   = "TODO_SOURCE_BUCKET"
+source_prefix   = "TODO_SOURCE_PREFIX"
+
+# Target S3 Tables objects.
+table_bucket_arn = "arn:aws:s3tables:TODO_REGION:TODO_AWS_ACCOUNT_ID:bucket/TODO_TABLE_BUCKET_NAME"
+catalog_name     = "s3tablesbp"
+namespace        = "customer_logs"
+table_name       = "logs_service_hour"
+
+# Runtime artifact. This jar must already exist.
+s3tables_runtime_jar_s3_uri = "s3://TODO_ARTIFACT_BUCKET/TODO_RUNTIME_JAR_PREFIX/s3-tables-catalog-for-iceberg-runtime-0.1.8.jar"
+
+# Glue runtime knobs.
+schedule_expression = "cron(0/5 * * * ? *)"
+create_schedule     = true
+schedule_enabled    = true
+glue_version        = "5.0"
+worker_type         = "G.1X"
+number_of_workers   = 2
+timeout_minutes     = 480
+max_retries         = 0
+max_concurrent_runs = 1
+
+# Optional extra Glue args. Leave empty unless needed.
+additional_default_arguments = {}
+
+# AWS-side Snowflake read path.
+create_snowflake_read_role = true
+snowflake_iam_user_arn     = "arn:aws:iam::TODO_SNOWFLAKE_AWS_ACCOUNT_ID:user/TODO_SNOWFLAKE_IAM_USER"
+
+# Phase 1 bootstrap:
+# - first apply with bootstrap trust enabled
+# - do not set snowflake_external_id yet
+snowflake_bootstrap_trust_enabled = true
+# snowflake_external_id = "TODO_SNOWFLAKE_EXTERNAL_ID"
+
+# Phase 3 only:
+# - after the first replace run creates the table
+# - re-apply with this true
+grant_snowflake_lakeformation_permissions = false
+
+tags = {
+  ManagedBy   = "terraform"
+  Environment = "customer"
+  Project     = "sawmills-iceberg-bridge"
+}
