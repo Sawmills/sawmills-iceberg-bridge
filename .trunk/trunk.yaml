@@ -25,6 +25,9 @@ lint:
     - sqlfluff@4.1.0
     - tflint@0.59.1
   ignore:
+    - linters: [markdownlint]
+      paths:
+        - CLAUDE.md
     - linters: [sqlfluff]
       paths:
         - snowflake/setup.sql
