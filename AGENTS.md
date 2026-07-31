@@ -1,5 +1,3 @@
-READ ${CODE_ROOT:-$HOME/Code}/agent-scripts/AGENTS.md BEFORE ANYTHING (skip if missing). If missing, also try: $HOME/repos/agent-scripts/AGENTS.md
-
 # AGENTS.md
 
 ## Project
@@ -38,7 +36,9 @@ It does not manage Snowflake catalog integrations or Iceberg tables through Terr
 - Start Snowflake trust bootstrap with `snowflake_bootstrap_trust_enabled = true`.
 - Leave `snowflake_external_id` unset during the first apply.
 - Leave `grant_snowflake_lakeformation_permissions = false` until the table exists.
-- After Snowflake setup, set `snowflake_external_id` and set `snowflake_bootstrap_trust_enabled = false`.
+- After Snowflake setup, set `snowflake_iam_user_arn` and
+  `snowflake_external_id`, then set
+  `snowflake_bootstrap_trust_enabled = false`.
 - Use a pinned release tag. Do not use floating `main` for customer deployments.
 - Keep the Terraform module, `snowflake/setup.sql`, and `CUSTOMER_HANDOFF.md` on the same release.
 - Keep customer-specific benchmark artifacts and environment-specific runbooks outside this repository.
